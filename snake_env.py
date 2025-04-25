@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 import random
+import time
 from gym import spaces
 import pygame
 
@@ -15,9 +16,13 @@ class SnakeGameEnv(gym.Env):
         self.cell_size = cell_size
         self.columns = width // cell_size
         self.rows = height // cell_size
-
+        self.steps_since_food = 0
         self.action_space = spaces.Discrete(4)  # UP, DOWN, LEFT, RIGHT
-        self.observation_space = spaces.Box(low=0, high=1, shape=(self.rows, self.columns, 3), dtype=np.uint8)
+
+        # Use correct RGB range (0-255)
+        self.observation_space = spaces.Box(
+            low=0, high=255, shape=(self.rows, self.columns, 3), dtype=np.uint8
+        )
 
         self.reset()
 
@@ -45,10 +50,12 @@ class SnakeGameEnv(gym.Env):
         elif action == 3 and self.direction != (-1, 0):  # RIGHT
             self.direction = (1, 0)
 
-        new_head = ((self.snake[0][0] + self.direction[0]) % self.columns,
-                    (self.snake[0][1] + self.direction[1]) % self.rows)
+        new_head = (
+            (self.snake[0][0] + self.direction[0]) % self.columns,
+            (self.snake[0][1] + self.direction[1]) % self.rows
+        )
 
-        reward = 0
+        reward = -0.1
 
         if new_head in self.snake:
             self.done = True
@@ -56,12 +63,20 @@ class SnakeGameEnv(gym.Env):
         else:
             self.snake.insert(0, new_head)
             if new_head == self.food:
-                reward = 1
+                reward = 100
                 self.score += 1
+                self.steps_since_food = 0
                 self._place_food()
             else:
                 self.snake.pop()
+                self.steps_since_food += 1
 
+        if self.steps_since_food > 100:
+            self.done = True
+            reward = -100
+        old_distance = np.linalg.norm(np.array(self.snake[0]) - np.array(self.food))
+        new_distance = np.linalg.norm(np.array(new_head) - np.array(self.food))
+        reward += (old_distance - new_distance) * 0.1
         return self._get_observation(), reward, self.done, {}
 
     def _get_observation(self):
@@ -73,38 +88,30 @@ class SnakeGameEnv(gym.Env):
         return obs
 
     def render(self, mode='human'):
-        if not hasattr(self, 'screen'):
-            pygame.init()
-            self.screen = pygame.display.set_mode((self.width, self.height))
-            pygame.display.set_caption("Snake RL")
+        if mode == 'human':
+            if not hasattr(self, 'screen'):
+                pygame.init()
+                self.screen = pygame.display.set_mode((self.width, self.height))
+                pygame.display.set_caption("Snake RL")
 
-        self.screen.fill((0, 0, 0))
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.close()
 
-        for x, y in self.snake:
-            pygame.draw.rect(self.screen, (0, 255, 0),
-                             (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
+            self.screen.fill((0, 0, 0))
 
-        fx, fy = self.food
-        pygame.draw.rect(self.screen, (255, 0, 0),
-                         (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
+            for x, y in self.snake:
+                pygame.draw.rect(self.screen, (0, 255, 0),
+                                (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
 
-        pygame.display.flip()
+            fx, fy = self.food
+            pygame.draw.rect(self.screen, (255, 0, 0),
+                            (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
+
+            pygame.display.flip()
+            time.sleep(0.1) 
 
     def close(self):
         if hasattr(self, 'screen'):
             pygame.quit()
-
-
-# To use with stable-baselines3:
-from stable_baselines3 import DQN
-env = SnakeGameEnv()
-model = DQN("MlpPolicy", env, verbose=1)
-model.learn(total_timesteps=100000)
-model.save("snake_dqn")
-
-obs = env.reset()
-done = False
-while not done:
-    action, _ = model.predict(obs)
-    obs, reward, done, _ = env.step(action)
-    env.render()
+            del self.screen
