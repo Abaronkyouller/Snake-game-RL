@@ -41,6 +41,8 @@ class SnakeGameEnv(gym.Env):
                 break
 
     def step(self, action):
+        old_distance = np.linalg.norm(np.array(self.snake[0]) - np.array(self.food))
+
         if action == 0 and self.direction != (0, 1):  # UP
             self.direction = (0, -1)
         elif action == 1 and self.direction != (0, -1):  # DOWN
@@ -55,15 +57,15 @@ class SnakeGameEnv(gym.Env):
             (self.snake[0][1] + self.direction[1]) % self.rows
         )
 
-        reward = -0.1
+        reward = -0.1 
 
         if new_head in self.snake:
             self.done = True
-            reward = -1
+            reward = -10 
         else:
             self.snake.insert(0, new_head)
             if new_head == self.food:
-                reward = 100
+                reward = 10 
                 self.score += 1
                 self.steps_since_food = 0
                 self._place_food()
@@ -73,10 +75,11 @@ class SnakeGameEnv(gym.Env):
 
         if self.steps_since_food > 100:
             self.done = True
-            reward = -100
-        old_distance = np.linalg.norm(np.array(self.snake[0]) - np.array(self.food))
+            reward = -10
+
         new_distance = np.linalg.norm(np.array(new_head) - np.array(self.food))
-        reward += (old_distance - new_distance) * 0.1
+        reward += (old_distance - new_distance) * 0.5
+
         return self._get_observation(), reward, self.done, {}
 
     def _get_observation(self):
