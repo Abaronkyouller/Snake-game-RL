@@ -32,6 +32,7 @@ class SnakeGameEnv(gym.Env):
         self.done = False
         self.score = 0
         self._place_food()
+        self.steps_since_food=0
         return self._get_observation()
 
     def _place_food(self):
@@ -41,6 +42,7 @@ class SnakeGameEnv(gym.Env):
                 break
 
     def step(self, action):
+        self.steps_since_food += 1
         old_distance = np.linalg.norm(np.array(self.snake[0]) - np.array(self.food))
 
         if action == 0 and self.direction != (0, 1):  # UP
@@ -57,25 +59,25 @@ class SnakeGameEnv(gym.Env):
             (self.snake[0][1] + self.direction[1]) % self.rows
         )
 
-        reward = -0.1 
+        reward = -0.5 
 
         if new_head in self.snake:
             self.done = True
-            reward = -10 
+            reward = -1 
         else:
             self.snake.insert(0, new_head)
             if new_head == self.food:
-                reward = 10 
+                reward = 1 
                 self.score += 1
                 self.steps_since_food = 0
                 self._place_food()
+            elif self.steps_since_food > 100:
+                self.done = True
+                reward = -1
             else:
                 self.snake.pop()
-                self.steps_since_food += 1
 
-        if self.steps_since_food > 100:
-            self.done = True
-            reward = -10
+        
 
         new_distance = np.linalg.norm(np.array(new_head) - np.array(self.food))
         reward += (old_distance - new_distance) * 0.5
@@ -112,7 +114,7 @@ class SnakeGameEnv(gym.Env):
                             (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
 
             pygame.display.flip()
-            time.sleep(0.1) 
+            time.sleep(0.05) 
 
     def close(self):
         if hasattr(self, 'screen'):

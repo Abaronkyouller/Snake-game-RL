@@ -12,7 +12,7 @@ model = DQN(
     exploration_fraction=0.3,
     device=device
 )
-model.learn(total_timesteps=500_000)
+model.learn(total_timesteps=100_000)
 model.save("snake_dqn")
 
 # Evaluation
