@@ -66,7 +66,7 @@ class SnakeGameEnv(gym.Env):
 
         if np.any(np.all(self.snake == new_head, axis=1)):
             self.done = True
-            reward = -1.0
+            reward = -2.0
         else:
             self.snake = np.vstack([new_head, self.snake])
             if new_head == self.food:
@@ -140,7 +140,7 @@ class SnakeGameEnv(gym.Env):
                              (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
 
             pygame.display.flip()
-            time.sleep(0.05)
+            time.sleep(0.01)
 
     def close(self):
         if hasattr(self, 'screen'):
