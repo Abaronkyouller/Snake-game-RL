@@ -1,14 +1,14 @@
-import gym
+import gymnasium as gym
 import numpy as np
 import random
 import time
-from gym import spaces
+from gymnasium import spaces
 import pygame
 
 class SnakeGameEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, width=400, height=400, cell_size=20):
+    def __init__(self, width=400, height=400, cell_size=10):
         super(SnakeGameEnv, self).__init__()
 
         self.width = width
@@ -19,26 +19,29 @@ class SnakeGameEnv(gym.Env):
         self.steps_since_food = 0
         self.action_space = spaces.Discrete(4)  # UP, DOWN, LEFT, RIGHT
 
-        # Use correct RGB range (0-255)
         self.observation_space = spaces.Box(
-            low=0, high=255, shape=(self.rows, self.columns, 3), dtype=np.uint8
+            low=-max(self.columns, self.rows),
+            high=max(self.columns, self.rows),
+            shape=(8,), # [food_x - head_x, food_y - head_y, dir_x, dir_y, danger_forward, danger_left, danger_right, steps_since_food]
+            dtype=np.float32
         )
 
         self.reset()
 
-    def reset(self):
-        self.snake = [(self.columns // 2, self.rows // 2)]
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.snake = np.array([[self.columns // 2, self.rows // 2]])
         self.direction = (1, 0)
         self.done = False
         self.score = 0
         self._place_food()
-        self.steps_since_food=0
-        return self._get_observation()
+        self.steps_since_food = 0
+        return self._get_observation(), {}
 
     def _place_food(self):
         while True:
-            self.food = (random.randint(0, self.columns - 1), random.randint(0, self.rows - 1))
-            if self.food not in self.snake:
+            self.food = (np.random.randint(0, self.columns), np.random.randint(0, self.rows))
+            if not np.any(np.all(self.snake == self.food, axis=1)):
                 break
 
     def step(self, action):
@@ -59,38 +62,61 @@ class SnakeGameEnv(gym.Env):
             (self.snake[0][1] + self.direction[1]) % self.rows
         )
 
-        reward = -0.5 
+        reward = -0.01
 
-        if new_head in self.snake:
+        if np.any(np.all(self.snake == new_head, axis=1)):
             self.done = True
-            reward = -1 
+            reward = -1.0
         else:
-            self.snake.insert(0, new_head)
+            self.snake = np.vstack([new_head, self.snake])
             if new_head == self.food:
-                reward = 1 
+                reward = 10.0
                 self.score += 1
                 self.steps_since_food = 0
                 self._place_food()
-            elif self.steps_since_food > 100:
+            elif self.steps_since_food > 200:
                 self.done = True
-                reward = -1
+                reward = -2.0
             else:
-                self.snake.pop()
-
-        
+                self.snake = self.snake[:-1]
 
         new_distance = np.linalg.norm(np.array(new_head) - np.array(self.food))
         reward += (old_distance - new_distance) * 0.5
 
-        return self._get_observation(), reward, self.done, {}
+        return self._get_observation(), reward, self.done, False, {}
 
     def _get_observation(self):
-        obs = np.zeros((self.rows, self.columns, 3), dtype=np.uint8)
-        for x, y in self.snake:
-            obs[y, x] = [0, 255, 0]  # Green snake
-        fx, fy = self.food
-        obs[fy, fx] = [255, 0, 0]  # Red food
-        return obs
+        head_x, head_y = self.snake[0]
+        food_x, food_y = self.food
+        dir_x, dir_y = self.direction
+
+        rel_food_x = food_x - head_x
+        rel_food_y = food_y - head_y
+
+        forward_pos = (
+            (head_x + dir_x) % self.columns,
+            (head_y + dir_y) % self.rows
+        )
+        left_dir = (-dir_y, dir_x)
+        left_pos = (
+            (head_x + left_dir[0]) % self.columns,
+            (head_y + left_dir[1]) % self.rows
+        )
+        right_dir = (dir_y, -dir_x)
+        right_pos = (
+            (head_x + right_dir[0]) % self.columns,
+            (head_y + right_dir[1]) % self.rows
+        )
+
+        danger_forward = 1.0 if np.any(np.all(self.snake == forward_pos, axis=1)) else 0.0
+        danger_left = 1.0 if np.any(np.all(self.snake == left_pos, axis=1)) else 0.0
+        danger_right = 1.0 if np.any(np.all(self.snake == right_pos, axis=1)) else 0.0
+
+        return np.array([
+            rel_food_x, rel_food_y, dir_x, dir_y,
+            danger_forward, danger_left, danger_right,
+            self.steps_since_food / 100.0
+        ], dtype=np.float32)
 
     def render(self, mode='human'):
         if mode == 'human':
@@ -107,16 +133,16 @@ class SnakeGameEnv(gym.Env):
 
             for x, y in self.snake:
                 pygame.draw.rect(self.screen, (0, 255, 0),
-                                (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
+                                 (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
 
             fx, fy = self.food
             pygame.draw.rect(self.screen, (255, 0, 0),
-                            (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
+                             (fx * self.cell_size, fy * self.cell_size, self.cell_size, self.cell_size))
 
             pygame.display.flip()
-            time.sleep(0.05) 
+            time.sleep(0.05)
 
     def close(self):
         if hasattr(self, 'screen'):
             pygame.quit()
-            del self.screen
+            del self.screen 

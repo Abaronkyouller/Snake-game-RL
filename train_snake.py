@@ -1,15 +1,19 @@
 from stable_baselines3 import DQN
 from snake_env import SnakeGameEnv
 import torch
+
 env = SnakeGameEnv()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = DQN(
-    "MlpPolicy",
+    "CnnPolicy",
     env,
     verbose=1,
     exploration_fraction=0.3,
+    batch_size=64,
+    buffer_size=50_000,
+    learning_rate=1e-4,
     device=device
 )
 model.learn(total_timesteps=100_000)
